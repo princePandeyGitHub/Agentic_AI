@@ -5,3 +5,10 @@ groq>=1.0.0
 numpy>=1.24.0
 tqdm>=4.66.0
 python-dotenv>=1.0.0
+fastapi
+uvicorn
+python-multipart
+pypdf
+python-docx
+streamlit
+requests
