@@ -1,35 +1,130 @@
-# Agentic AI System
+# Agentic RAG System
 
-## High Level Flow
+An Agnetic AI sytem with FastAPI backend + Streamlit UI for document ingestion and grounded Q&A with Groq Llama 3.18b instant and ChromaDB.
 
-### ingest the hr_data and incident_data to the chromdb first
-- load the embedding model
-- create chromadb client
-- get / create the collections
-- load the json data ( we have two types of data hr(which includes information about employees an d as well as policies) and incident(which includes information about different incidents as well as trouble shooting guides))
-- create four different types of data to be stored in the chromadb
-- convert each type of data to text and make its embedding and stores to chromadb
+## Features
+- Ingest PDF, DOCX, TXT, JSON into ChromaDB with metadata and chunking
+- Query with Llama 3.1 (Groq) to extract intent + filters for targeted retrieval
+- Grounded answers with citations; ungrounded responses are explicitly labeled
+- Server-side short‑term memory with citation carryover for follow‑ups
+- Streamlit UI for uploads and chat
 
-### how to search in these documents(tests)
-- similar steps load the model, chromadb client and get the collections
-- prepare your query and then do its embedding also and keep consistent while embedding
-- now we can simply search with this embedding with built-in function and n_results return the top k documents we want
-- it can return these things
-```bash
-{
-  "documents": [[doc1, doc2, doc3]],
-  "metadatas": [[meta1, meta2, meta3]],
-  "distances": [[d1, d2, d3]],
-  "ids": [[id1, id2, id3]]
-}
+## Architecture
+- **FastAPI** backend (`/ingest`, `/chat`)
+- **ChromaDB** persistent vector store
+- **mixedbread-ai/mxbai-embed-large-v1** for embeddings
+- **Groq Llama 3.1 8B Instant** for intent extraction and answer generation
 
+## Project Structure
 ```
-- we usually use documents to perform operations
+.
+├─ backend/
+│  ├─ api/
+│  │  ├─ chat.py
+│  │  └─ ingest.py
+│  ├─ core.py
+│  └─ main.py
+├─ chroma_db/
+├─ data/
+├─ streamlit_app.py
+├─ main.py
+└─ requirements.txt
+```
 
-## working of the agent.py
-- steps being repeated
-- we loads everything similarly and also setups our llm model
-- and then ask the llm with three things 
-- detailed prompt(that what llm have to do)
-- user query(what the user wants)
-- context(context is nothing but the top k documents we can get through the embedding model from chromadb)
+## Setup
+1) Create a virtual environment and install dependencies:
+```
+python -m venv venv
+venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
+
+2) Configure environment variables:
+```
+GROQ_API_KEY=your_key_here
+```
+
+## Run the Backend
+```
+python -m uvicorn backend.main:app --reload
+```
+
+## Run the Streamlit UI
+```
+streamlit run streamlit_app.py
+```
+
+## API Usage
+
+### POST /ingest
+Uploads a document and stores embeddings + metadata in ChromaDB.
+
+Form fields:
+- `file` (required)
+- `intent` (optional, default: `general`)
+- `metadata_json` (optional JSON string)
+
+### POST /chat
+Asks a question and returns answer + citations.
+
+Request body:
+```
+{
+  "query": "can you tell me about annual leave policy",
+  "session_id": "your-session-id",
+  "n_results": 4
+}
+```
+
+Response body:
+```
+{
+  "intent": "hr",
+  "user_query": "annual leave policy",
+  "filters": {"category": "leave"},
+  "grounding": "grounded",
+  "answer": "...",
+  "citations": [
+    {
+      "id": "...",
+      "document": "...",
+      "metadata": {...}
+    }
+  ]
+}
+```
+
+## Notes
+- For best retrieval, set an appropriate `intent` during ingestion (e.g., `hr`, `incident`).
+- If no relevant documents are found, the system returns an **ungrounded** response.
+- Conversation memory is server-side and keyed by `session_id`.
+
+## Troubleshooting
+- If `uvicorn` is not recognized, use:
+```
+python -m uvicorn backend.main:app --reload
+```
+- If ingestion fails for PDF/DOCX, ensure `pypdf` and `python-docx` are installed.
+
+## Testing this with a simple example
+
+### upload any document 
+- for example i have uploaded ncert class 10 chapter metals and non-metals for ingestion 
+![uploading documents](./screenshots/upload_documents.png "document upload for ingestion")
+
+- on success it returns a response with no. of chunks added and ids of various chunks
+![ingestion success message](./screenshots/ingestion_success.png "ingestion success")
+
+### asking a simple query to test
+- for example i am asking it "Why is sodium kept immersed in kerosene oil?"
+![ai response](./screenshots/asking_query.png "response that ai gives")
+
+- citations for grounding answers
+![citations based on query](./screenshots/citations_1.png "citations for grounding answer")
+
+## conversational memory test
+- asking a follow up to test short-term conversational memory
+![asking follow up question](./screenshots/follow_up_query.png "follow up question")
+
+- citations for grounding follow up answers
+![citations based on follow up query](./screenshots/citations_2_follow_up.png "citations for grounding follow up answer")
