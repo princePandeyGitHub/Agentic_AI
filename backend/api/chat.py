@@ -11,6 +11,7 @@ from backend.core import (
     get_memory,
     groq_client,
     model,
+    format_memory_concise,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -89,20 +90,18 @@ def build_intent_only_where(intent: str) -> Optional[Dict[str, Any]]:
 
 
 def answer_with_context(user_query: str, context: str, memory: List[Dict[str, str]]) -> str:
-    prompt = f"""
-You are a helpful assistant. Use ONLY the context below to answer.
-If the answer is not in the context, say "I don't know."
-
+    memory_str = format_memory_concise(memory)
+    memory_section = f"\nRecent conversation:\n{memory_str}\n" if memory_str else ""
+    
+    prompt = f"""You are a helpful assistant. Use ONLY the context below to answer.
+If the answer is not in the context, say "I don't know."{memory_section}
 Context:
 {context}
-
-Short-term memory:
-{memory}
 
 User question:
 {user_query}
 
-Answer concisely:
+Answer concisely in 2-3 sentences:
 """
     response = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
@@ -114,18 +113,18 @@ Answer concisely:
 
 
 def answer_with_memory(user_query: str, memory: List[Dict[str, str]]) -> str:
-    prompt = f"""
-You are a helpful assistant. Use ONLY the short-term memory below to answer
-follow-up questions about previously discussed documents or facts.
-If the answer is not in the memory, say "I don't know."
+    memory_str = format_memory_concise(memory)
+    
+    prompt = f"""You are a helpful assistant answering follow-up questions about previously discussed documents.
+Use ONLY the conversation history below. If the answer is not in the history, say "I don't know."
 
-Short-term memory:
-{memory}
+Conversation history:
+{memory_str}
 
 User question:
 {user_query}
 
-Answer concisely:
+Answer concisely in 1-2 sentences:
 """
     response = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
@@ -191,7 +190,7 @@ def chat(request: ChatRequest):
     ]
 
     context = "\n".join(documents) if documents else ""
-    memory = get_memory(request.session_id, limit=6)
+    memory = get_memory(request.session_id)  # Uses MAX_MEMORY_ENTRIES by default
 
     if context:
         answer = answer_with_context(user_query, context, memory)
